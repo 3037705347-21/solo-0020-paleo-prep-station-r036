@@ -14,10 +14,11 @@ const (
 
 // Error carries a machine-readable code without coupling domain code to HTTP.
 type Error struct {
-	Kind    ErrorKind
-	Code    string
-	Message string
-	Cause   error
+	Kind      ErrorKind
+	Code      string
+	Message   string
+	Reference string
+	Cause     error
 }
 
 func (e *Error) Error() string {
@@ -43,6 +44,12 @@ func Invalid(code, message string) error {
 
 func NotFound(code, message string) error {
 	return &Error{Kind: KindNotFound, Code: code, Message: message}
+}
+
+// NotFoundReference additionally exposes a locator for the moved resource, so
+// removed online reads can point at the surviving record instead of vanishing.
+func NotFoundReference(code, message, reference string) error {
+	return &Error{Kind: KindNotFound, Code: code, Message: message, Reference: reference}
 }
 
 func Conflict(code, message string) error {

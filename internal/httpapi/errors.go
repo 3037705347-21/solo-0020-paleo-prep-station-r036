@@ -9,8 +9,9 @@ import (
 )
 
 type errorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Reference string `json:"reference,omitempty"`
 }
 
 func writeError(w http.ResponseWriter, err error) {
@@ -30,8 +31,9 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 	if appErr, ok := contracts.AsError(err); ok {
 		writeJSON(w, statusForKind(appErr.Kind), errorBody{
-			Code:    appErr.Code,
-			Message: appErr.Message,
+			Code:      appErr.Code,
+			Message:   appErr.Message,
+			Reference: appErr.Reference,
 		})
 		return
 	}

@@ -7,7 +7,7 @@
 ## 目录
 
 - `cmd/paleo-prep-station`：HTTP 服务入口和监听参数。
-- `cmd/workflowcheck`：通过真实 HTTP 处理器执行四条业务链路的本地验证命令。
+- `cmd/workflowcheck`：通过真实 HTTP 处理器执行业务链路的本地验证命令（含两条归档链路）。
 - `internal/httpapi`：路由、请求解码、状态码映射和 JSON 输出。
 - `internal/station`：跨领域对象的编排、事务边界和业务流程。
 - `internal/domain`：标本、方案、进度和放行记录的状态与不变量。
@@ -30,8 +30,17 @@ go run ./cmd/paleo-prep-station --addr 127.0.0.1:18133
 - `POST /specimens/{id}/plans`
 - `GET /plans/{id}`
 - `POST /plans/{id}/approval`
+- `POST /plans/{id}/cancel`
 - `POST /plans/{id}/progress`
+- `POST /plans/{id}/archive`（首次 201，重复提交幂等返回 200）
+- `GET /plans/{id}/archive`
+- `GET /plan-archives/{id}`
+- `GET /specimens/{id}/archives`
 - `POST /specimens/{id}/release`
+
+## 方案归档
+
+已完成方案在办结研究放行、已取消方案在保留取消记录后，且都离开最近查询保留期（默认三十天）并提供完整审计引用编号时，可以通过 `POST /plans/{id}/archive` 归档。归档把方案及其进度移入不可变记录（含 SHA-256 内容摘要），在线集合不再包含该方案：`GET /plans/{id}` 返回带 `reference` 的 `plan_archived` 404，归档本身可通过 `GET /plans/{id}/archive` 或 `GET /plan-archives/{id}` 定位。归档幂等，重复提交不会产生第二份有效结果；归档不会改写标本或放行记录的既有状态。
 
 ## 本地验证
 
@@ -42,9 +51,11 @@ go run ./cmd/workflowcheck --workflow register-specimen
 go run ./cmd/workflowcheck --workflow approve-prep-plan
 go run ./cmd/workflowcheck --workflow log-preparation
 go run ./cmd/workflowcheck --workflow release-for-study
+go run ./cmd/workflowcheck --workflow archive-completed-plan
+go run ./cmd/workflowcheck --workflow archive-cancelled-plan
 ```
 
-这些检查会启动临时 HTTP 处理器并调用真实公共路由。
+这些检查会启动临时 HTTP 处理器并调用真实公共路由。`go test ./...` 覆盖归档前置条件、保留期、放行引用完整性、幂等归档、归档后读范围隔离和既有状态保持。
 
 ## 环境变量
 
@@ -52,4 +63,4 @@ go run ./cmd/workflowcheck --workflow release-for-study
 
 ## 测试边界
 
-本基线按要求暂不生成单元测试、测试夹具或端到端测试文件。后续任务阶段会补充红绿验证测试，届时再替换或扩展当前的生产级链路检查。
+自动化测试位于各 `internal` 包内（领域不变量、站务编排与 HTTP 路由），生产级链路检查继续承担端到端烟雾验证。

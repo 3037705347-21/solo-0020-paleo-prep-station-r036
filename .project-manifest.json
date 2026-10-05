@@ -128,6 +128,51 @@
         "repository",
         "contracts"
       ]
+    },
+    {
+      "id": "archive-completed-plan",
+      "name": "Archive completed plan",
+      "entry": "POST /plans/{id}/archive",
+      "steps": [
+        "reject plans still in the recent-query retention window",
+        "verify the completed plan has a settled release and final one-hundred-percent progress",
+        "validate archivist and audit reference",
+        "commit the immutable digest-bearing archive and remove the plan from the online set atomically"
+      ],
+      "success": "returns 201 with the archive, locatable by plan id and archive id",
+      "failure": "returns 409 within the retention window or with an unsettled release; repeat submissions return the same archive with 200",
+      "verification": "workflowcheck archives a released plan, proves idempotency, the locatable plan_archived read, preserved listing scopes and unchanged specimen state",
+      "module_ids": [
+        "entrypoint",
+        "runtimecheck",
+        "httpapi",
+        "station",
+        "domain",
+        "repository",
+        "contracts"
+      ]
+    },
+    {
+      "id": "archive-cancelled-plan",
+      "name": "Archive cancelled plan",
+      "entry": "POST /plans/{id}/cancel + POST /plans/{id}/archive",
+      "steps": [
+        "cancel a draft plan and record the operator",
+        "archive the terminal cancelled plan with an audit reference but without any release reference",
+        "remove the plan from the online set while leaving specimen state untouched"
+      ],
+      "success": "returns the cancelled plan and then an immutable archive",
+      "failure": "approved or otherwise non-draft plans cannot be cancelled or archived",
+      "verification": "workflowcheck proves only drafts cancel, archives the cancelled draft, and verifies the online set and specimen state",
+      "module_ids": [
+        "entrypoint",
+        "runtimecheck",
+        "httpapi",
+        "station",
+        "domain",
+        "repository",
+        "contracts"
+      ]
     }
   ],
   "complexity": {
@@ -137,6 +182,6 @@
       "error_propagation",
       "concurrency"
     ],
-    "notes": "Plan and specimen state changes share one repository mutation; duplicate catalog numbers and unfinished plans are rejected at commit time."
+    "notes": "Plan and specimen state changes share one repository mutation; duplicate catalog numbers and unfinished plans are rejected at commit time. Archival commits an immutable digest-bearing record and online-set removal in one mutation; repeat submissions are idempotent and archived reads return a locatable plan_archived error instead of a silent scope rewrite."
   }
 }

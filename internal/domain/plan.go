@@ -26,6 +26,7 @@ type PrepPlan struct {
 	Status         PlanStatus `json:"status"`
 	ApprovedBy     string     `json:"approved_by,omitempty"`
 	ApprovedAt     *time.Time `json:"approved_at,omitempty"`
+	CancelledBy    string     `json:"cancelled_by,omitempty"`
 	Version        int        `json:"version"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -86,6 +87,12 @@ func (p PrepPlan) IsCompleted() bool {
 	return p.Status == PlanCompleted
 }
 
+// IsTerminal reports whether the plan has reached a non-revertible end state.
+// Only terminal plans can ever leave the online set and become an archive.
+func (p PrepPlan) IsTerminal() bool {
+	return p.Status == PlanCompleted || p.Status == PlanCancelled
+}
+
 func (p *PrepPlan) Approve(approvedBy string, now time.Time) error {
 	if p.Status != PlanDraft {
 		return contracts.Conflict("plan_not_approvable", "只有草稿方案可以审批")
@@ -129,11 +136,16 @@ func (p *PrepPlan) Complete(now time.Time) error {
 	return nil
 }
 
-func (p *PrepPlan) Cancel(now time.Time) error {
+func (p *PrepPlan) Cancel(cancelledBy string, now time.Time) error {
 	if p.Status != PlanDraft {
 		return contracts.Conflict("plan_not_cancellable", "只有草稿方案可以取消")
 	}
+	canceler, err := requiredText("取消人", cancelledBy, 80)
+	if err != nil {
+		return err
+	}
 	p.Status = PlanCancelled
+	p.CancelledBy = canceler
 	p.Version++
 	p.UpdatedAt = now.UTC()
 	return nil

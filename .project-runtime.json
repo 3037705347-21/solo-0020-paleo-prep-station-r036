@@ -26,6 +26,14 @@
     {
       "workflow_id": "release-for-study",
       "command": "go run ./cmd/workflowcheck --workflow release-for-study"
+    },
+    {
+      "workflow_id": "archive-completed-plan",
+      "command": "go run ./cmd/workflowcheck --workflow archive-completed-plan"
+    },
+    {
+      "workflow_id": "archive-cancelled-plan",
+      "command": "go run ./cmd/workflowcheck --workflow archive-cancelled-plan"
     }
   ]
 }

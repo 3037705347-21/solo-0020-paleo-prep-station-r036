@@ -19,6 +19,10 @@ type ApprovalRequest struct {
 	ApprovedBy string `json:"approved_by"`
 }
 
+type CancelPlanRequest struct {
+	CancelledBy string `json:"cancelled_by"`
+}
+
 type ProgressRequest struct {
 	Stage      string `json:"stage"`
 	Percent    int    `json:"percent"`
@@ -30,4 +34,9 @@ type ReleaseRequest struct {
 	Purpose    string `json:"purpose"`
 	Recipient  string `json:"recipient"`
 	ApprovedBy string `json:"approved_by"`
+}
+
+type ArchivePlanRequest struct {
+	ArchivedBy     string `json:"archived_by"`
+	AuditReference string `json:"audit_reference"`
 }

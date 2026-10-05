@@ -19,9 +19,9 @@ func (s *Service) LogProgress(
 
 	var created domain.ProgressEntry
 	err := s.repo.Mutate(func(m *repository.Mutation) error {
-		plan, ok := m.GetPlan(planID)
-		if !ok {
-			return notFoundPlan(planID)
+		plan, err := s.loadOnlinePlan(m, planID)
+		if err != nil {
+			return err
 		}
 		specimen, ok := m.GetSpecimen(plan.SpecimenID)
 		if !ok {
