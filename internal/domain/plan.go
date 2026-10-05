@@ -26,6 +26,8 @@ type PrepPlan struct {
 	Status         PlanStatus `json:"status"`
 	ApprovedBy     string     `json:"approved_by,omitempty"`
 	ApprovedAt     *time.Time `json:"approved_at,omitempty"`
+	CancelledBy    string     `json:"cancelled_by,omitempty"`
+	CancelledAt    *time.Time `json:"cancelled_at,omitempty"`
 	Version        int        `json:"version"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -82,8 +84,28 @@ func (p PrepPlan) IsOpen() bool {
 	return p.Status == PlanDraft || p.Status == PlanApproved || p.Status == PlanActive
 }
 
+func (p PrepPlan) IsTerminal() bool {
+	return p.Status == PlanCompleted || p.Status == PlanCancelled
+}
+
 func (p PrepPlan) IsCompleted() bool {
 	return p.Status == PlanCompleted
+}
+
+// ClosedAt is the moment the plan left the online workflow: approval-closing
+// for completed plans, cancellation for cancelled ones.
+func (p PrepPlan) ClosedAt() (time.Time, bool) {
+	switch p.Status {
+	case PlanCompleted:
+		return p.UpdatedAt, true
+	case PlanCancelled:
+		if p.CancelledAt != nil {
+			return *p.CancelledAt, true
+		}
+		return p.UpdatedAt, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 func (p *PrepPlan) Approve(approvedBy string, now time.Time) error {
@@ -129,12 +151,22 @@ func (p *PrepPlan) Complete(now time.Time) error {
 	return nil
 }
 
-func (p *PrepPlan) Cancel(now time.Time) error {
+func (p *PrepPlan) Cancel(cancelledBy string, now time.Time) error {
+	if p.Status == PlanCancelled {
+		return nil
+	}
 	if p.Status != PlanDraft {
 		return contracts.Conflict("plan_not_cancellable", "只有草稿方案可以取消")
 	}
+	canceller, err := requiredText("取消人", cancelledBy, 80)
+	if err != nil {
+		return err
+	}
+	stamp := now.UTC()
 	p.Status = PlanCancelled
+	p.CancelledBy = canceller
+	p.CancelledAt = &stamp
 	p.Version++
-	p.UpdatedAt = now.UTC()
+	p.UpdatedAt = stamp
 	return nil
 }

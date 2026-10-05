@@ -26,6 +26,14 @@ type ProgressRequest struct {
 	RecordedBy string `json:"recorded_by"`
 }
 
+type CancelPlanRequest struct {
+	CancelledBy string `json:"cancelled_by"`
+}
+
+type ArchivePlanRequest struct {
+	ArchivedBy string `json:"archived_by"`
+}
+
 type ReleaseRequest struct {
 	Purpose    string `json:"purpose"`
 	Recipient  string `json:"recipient"`

@@ -5,7 +5,8 @@
     ".go"
   ],
   "build_command": "go build ./...",
-  "testing": "deferred",
+  "test_command": "go test ./...",
+  "testing": "go_test",
   "service": {
     "run_command": "go run ./cmd/paleo-prep-station --addr 127.0.0.1:18133",
     "health_url": "http://127.0.0.1:18133/healthz"
@@ -26,6 +27,18 @@
     {
       "workflow_id": "release-for-study",
       "command": "go run ./cmd/workflowcheck --workflow release-for-study"
+    },
+    {
+      "workflow_id": "archive-completed-plan",
+      "command": "go run ./cmd/workflowcheck --workflow archive-completed-plan"
+    },
+    {
+      "workflow_id": "archive-blocked-plan",
+      "command": "go run ./cmd/workflowcheck --workflow archive-blocked-plan"
+    },
+    {
+      "workflow_id": "archive-retention-window",
+      "command": "go run ./cmd/workflowcheck --workflow archive-retention-window"
     }
   ]
 }

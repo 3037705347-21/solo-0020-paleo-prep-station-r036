@@ -83,6 +83,10 @@ func (s Specimen) IsStable() bool {
 	return s.Status == SpecimenStabilized
 }
 
+func (s Specimen) IsAvailable() bool {
+	return s.Status == SpecimenAvailable
+}
+
 func (s *Specimen) MarkPlanned(now time.Time) error {
 	if s.Status == SpecimenPlanned {
 		return nil

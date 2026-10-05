@@ -11,20 +11,53 @@ import (
 	"example.com/paleo-prep-station/internal/repository"
 )
 
+// DefaultArchiveRetention is how long a finished plan stays in the recent
+// query scope before it may leave the online collection.
+const DefaultArchiveRetention = 30 * 24 * time.Hour
+
 type Service struct {
-	repo *repository.MemoryRepository
-	now  func() time.Time
-	seq  atomic.Uint64
+	repo             *repository.MemoryRepository
+	now              func() time.Time
+	archiveRetention time.Duration
+	seq              atomic.Uint64
 }
 
-func New(repo *repository.MemoryRepository) *Service {
+type Option func(*Service)
+
+// WithArchiveRetention overrides how long finished plans remain in the recent
+// query scope before they can be archived. Negative values collapse to zero.
+func WithArchiveRetention(window time.Duration) Option {
+	return func(s *Service) {
+		if window < 0 {
+			window = 0
+		}
+		s.archiveRetention = window
+	}
+}
+
+// WithClock overrides the time source. It exists for deterministic local
+// workflow checks and tests.
+func WithClock(clock func() time.Time) Option {
+	return func(s *Service) {
+		if clock != nil {
+			s.now = clock
+		}
+	}
+}
+
+func New(repo *repository.MemoryRepository, options ...Option) *Service {
 	if repo == nil {
 		repo = repository.NewMemory()
 	}
-	return &Service{
-		repo: repo,
-		now:  func() time.Time { return time.Now().UTC() },
+	service := &Service{
+		repo:             repo,
+		now:              func() time.Time { return time.Now().UTC() },
+		archiveRetention: DefaultArchiveRetention,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) nextID(prefix string) string {

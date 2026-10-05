@@ -18,6 +18,19 @@ type Error struct {
 	Code    string
 	Message string
 	Cause   error
+	Details map[string]string
+}
+
+// WithDetail returns a copy of the error with an additional machine-readable
+// detail value (for example the archive id that locates a sealed plan).
+func (e *Error) WithDetail(key, value string) *Error {
+	cloned := *e
+	cloned.Details = make(map[string]string, len(e.Details)+1)
+	for detailKey, detailValue := range e.Details {
+		cloned.Details[detailKey] = detailValue
+	}
+	cloned.Details[key] = value
+	return &cloned
 }
 
 func (e *Error) Error() string {

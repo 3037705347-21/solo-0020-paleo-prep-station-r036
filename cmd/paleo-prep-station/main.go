@@ -23,10 +23,11 @@ func main() {
 
 func run() int {
 	addr := flag.String("addr", "127.0.0.1:18133", "local HTTP listen address")
+	archiveRetention := flag.Duration("archive-retention", station.DefaultArchiveRetention, "minimum time a finished plan remains in the recent query scope before archiving")
 	flag.Parse()
 
 	repo := repository.NewMemory()
-	service := station.New(repo)
+	service := station.New(repo, station.WithArchiveRetention(*archiveRetention))
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           httpapi.NewRouter(service),

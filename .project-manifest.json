@@ -128,6 +128,72 @@
         "repository",
         "contracts"
       ]
+    },
+    {
+      "id": "archive-completed-plan",
+      "name": "Archive finished plan",
+      "entry": "POST /plans/{id}/archive + GET /archives/{id}",
+      "steps": [
+        "verify the plan is terminal, outside the retention window, and has complete references including a finished release",
+        "seal the plan and progress snapshot with a SHA-256 digest in one mutation",
+        "remove the plan from the online collection and store the immutable archive"
+      ],
+      "success": "returns the immutable archive locatable by id while online reads explicitly reference it",
+      "failure": "returns conflict for non-terminal, in-window, unreleased or incompletely referenced plans",
+      "verification": "workflowcheck seals a released completed plan, proves duplicate archiving returns one result, and checks read scope and locator behavior",
+      "module_ids": [
+        "entrypoint",
+        "runtimecheck",
+        "httpapi",
+        "station",
+        "domain",
+        "repository",
+        "contracts"
+      ]
+    },
+    {
+      "id": "archive-blocked-plan",
+      "name": "Block invalid plan archiving",
+      "entry": "POST /plans/{id}/archive + POST /plans/{id}/cancellation",
+      "steps": [
+        "refuse a completed plan whose release is unfinished",
+        "refuse a non-terminal draft plan",
+        "allow a referenced-free cancelled draft to archive without side effects on failure"
+      ],
+      "success": "cancelled drafts archive to a zero-progress immutable fact",
+      "failure": "failed archives leave plan, progress, specimen and read scope unchanged",
+      "verification": "workflowcheck asserts release_unfinished and plan_not_archivable conflicts, then archives a cancelled draft",
+      "module_ids": [
+        "entrypoint",
+        "runtimecheck",
+        "httpapi",
+        "station",
+        "domain",
+        "repository",
+        "contracts"
+      ]
+    },
+    {
+      "id": "archive-retention-window",
+      "name": "Enforce archive retention window",
+      "entry": "POST /plans/{id}/archive",
+      "steps": [
+        "configure a non-zero retention window",
+        "finish and release a plan inside the window",
+        "refuse archiving and keep the plan online and readable"
+      ],
+      "success": "the plan remains in recent query scope with its prior state intact",
+      "failure": "returns plan_still_in_recent_scope conflict",
+      "verification": "workflowcheck runs with a 24h retention and verifies the plan stays online",
+      "module_ids": [
+        "entrypoint",
+        "runtimecheck",
+        "httpapi",
+        "station",
+        "domain",
+        "repository",
+        "contracts"
+      ]
     }
   ],
   "complexity": {
@@ -137,6 +203,6 @@
       "error_propagation",
       "concurrency"
     ],
-    "notes": "Plan and specimen state changes share one repository mutation; duplicate catalog numbers and unfinished plans are rejected at commit time."
+    "notes": "Plan and specimen state changes share one repository mutation; duplicate catalog numbers and unfinished plans are rejected at commit time. Archiving seals an immutable digest-backed fact and moves the plan out of the online collection in the same mutation, with duplicate archiving collapsed onto one result."
   }
 }

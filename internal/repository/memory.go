@@ -1,17 +1,44 @@
 package repository
 
 import (
+	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
 	"example.com/paleo-prep-station/internal/domain"
 )
 
+var (
+	// ErrArchiveIDExists is returned when a second archive tries to reuse an
+	// existing archive id.
+	ErrArchiveIDExists = errors.New("archive id already exists")
+	// ErrPlanAlreadyArchived guarantees sealing is one-shot: a plan can never
+	// produce a second valid archive.
+	ErrPlanAlreadyArchived = errors.New("plan already archived")
+	// ErrPlanMissing means the online plan to seal vanished inside the
+	// transaction.
+	ErrPlanMissing = errors.New("plan missing")
+)
+
+func errArchiveSealed(id string) error {
+	return fmt.Errorf("%w: %s", ErrArchiveIDExists, id)
+}
+
+func errPlanAlreadyArchived(id string) error {
+	return fmt.Errorf("%w: %s", ErrPlanAlreadyArchived, id)
+}
+
+func errPlanMissing(id string) error {
+	return fmt.Errorf("%w: %s", ErrPlanMissing, id)
+}
+
 type state struct {
 	specimens map[string]domain.Specimen
 	plans     map[string]domain.PrepPlan
 	progress  map[string][]domain.ProgressEntry
 	releases  map[string]domain.ReleaseRecord
+	archives  map[string]domain.PlanArchive
 }
 
 type MemoryRepository struct {
@@ -26,6 +53,7 @@ func NewMemory() *MemoryRepository {
 			plans:     make(map[string]domain.PrepPlan),
 			progress:  make(map[string][]domain.ProgressEntry),
 			releases:  make(map[string]domain.ReleaseRecord),
+			archives:  make(map[string]domain.PlanArchive),
 		},
 	}
 }
@@ -54,6 +82,7 @@ func cloneMutation(source state) *Mutation {
 		plans:     make(map[string]domain.PrepPlan, len(source.plans)),
 		progress:  make(map[string][]domain.ProgressEntry, len(source.progress)),
 		releases:  make(map[string]domain.ReleaseRecord, len(source.releases)),
+		archives:  make(map[string]domain.PlanArchive, len(source.archives)),
 	}
 	for key, value := range source.specimens {
 		copied.specimens[key] = value
@@ -66,6 +95,9 @@ func cloneMutation(source state) *Mutation {
 	}
 	for key, value := range source.releases {
 		copied.releases[key] = value
+	}
+	for key, value := range source.archives {
+		copied.archives[key] = value
 	}
 	return &Mutation{state: copied}
 }
@@ -163,4 +195,61 @@ func (m *Mutation) ReleaseForSpecimen(specimenID string) (domain.ReleaseRecord, 
 
 func (m *Mutation) PutRelease(value domain.ReleaseRecord) {
 	m.state.releases[value.ID] = value
+}
+
+// GetArchive reads an immutable archive by its own id. Archives live in a
+// collection separate from the online plan set and never return through
+// GetPlan/ListPlansForSpecimen.
+func (m *Mutation) GetArchive(id string) (domain.PlanArchive, bool) {
+	value, ok := m.state.archives[id]
+	return value, ok
+}
+
+// GetArchiveForPlan locates the existence fact left by a sealed plan.
+func (m *Mutation) GetArchiveForPlan(planID string) (domain.PlanArchive, bool) {
+	for _, value := range m.state.archives {
+		if value.PlanID == planID {
+			return value, true
+		}
+	}
+	return domain.PlanArchive{}, false
+}
+
+// ListArchivesForSpecimen returns the archive facts left by plans of one
+// specimen, oldest sealing first. It lets the online plan listing disclose
+// which plans left the collection and where to find them, instead of letting
+// them vanish silently.
+func (m *Mutation) ListArchivesForSpecimen(specimenID string) []domain.PlanArchive {
+	values := make([]domain.PlanArchive, 0)
+	for _, value := range m.state.archives {
+		if value.SpecimenID == specimenID {
+			values = append(values, value)
+		}
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].ArchivedAt.Equal(values[j].ArchivedAt) {
+			return values[i].ID < values[j].ID
+		}
+		return values[i].ArchivedAt.Before(values[j].ArchivedAt)
+	})
+	return values
+}
+
+// SealPlan commits an archive and removes the plan together with its progress
+// trail from the online collection in one step. It never modifies the plan
+// fields: the value stored in the archive is the exact snapshot passed in.
+func (m *Mutation) SealPlan(archive domain.PlanArchive) error {
+	if _, exists := m.state.archives[archive.ID]; exists {
+		return errArchiveSealed(archive.ID)
+	}
+	if _, exists := m.GetArchiveForPlan(archive.PlanID); exists {
+		return errPlanAlreadyArchived(archive.PlanID)
+	}
+	if _, ok := m.state.plans[archive.PlanID]; !ok {
+		return errPlanMissing(archive.PlanID)
+	}
+	delete(m.state.plans, archive.PlanID)
+	delete(m.state.progress, archive.PlanID)
+	m.state.archives[archive.ID] = archive
+	return nil
 }

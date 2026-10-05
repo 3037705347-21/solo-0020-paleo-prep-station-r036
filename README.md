@@ -28,10 +28,40 @@ go run ./cmd/paleo-prep-station --addr 127.0.0.1:18133
 - `GET /specimens` 与 `POST /specimens`
 - `GET /specimens/{id}`
 - `POST /specimens/{id}/plans`
+- `GET /specimens/{id}/plans`
+- `POST /specimens/{id}/release`
 - `GET /plans/{id}`
 - `POST /plans/{id}/approval`
+- `POST /plans/{id}/cancellation`
 - `POST /plans/{id}/progress`
-- `POST /specimens/{id}/release`
+- `POST /plans/{id}/archive`
+- `GET /archives/{id}`
+
+## 方案归档
+
+进入终态（`completed` 或 `cancelled`）且离开最近查询保留范围的方案，才允许通过
+`POST /plans/{id}/archive` 归档。归档在同一个仓储事务内：
+
+1. 校验方案为终态，并且自结束时刻起已经过保留期（默认 30 天，可用
+   `--archive-retention` 调整）；
+2. 已完成方案必须拥有完整、连续、单调且以 100% 收尾的进度轨迹，且其标本已经
+   `available` 并存在永久放行记录；已取消方案必须没有任何进度记录引用；
+3. 生成不可变归档：封存方案与进度的精确快照、归档人与时间，并对规范化快照计算
+   SHA-256 摘要，作为可校验的存在事实；
+4. 把方案及其进度原子移出在线集合，写入独立的归档集合。
+
+归档之后：
+
+- 在线读取范围不会被静默改写：`GET /plans/{id}` 返回 `404 plan_archived`，写操作
+  返回 `409 plan_archived`，错误体的 `details.archive_id` 指回归档；
+- `GET /specimens/{id}/plans` 的 `items` 只含在线方案，另以 `archived` 数组显式给出
+  已移出方案的归档定位，方案不会无声消失；
+- 归档可通过 `GET /archives/{id}` 永久读取，读取时会重新校验摘要；
+- 重复归档返回 `409 plan_already_archived` 并指向既有归档，绝不会生成第二份有效结果；
+- 归档失败不提交任何变更，方案状态、进度、标本状态与读取范围保持原样。
+
+启动参数 `--archive-retention`（Go duration，如 `24h`、`720h`）控制方案结束后仍属
+最近查询范围的时长。
 
 ## 本地验证
 
@@ -42,6 +72,9 @@ go run ./cmd/workflowcheck --workflow register-specimen
 go run ./cmd/workflowcheck --workflow approve-prep-plan
 go run ./cmd/workflowcheck --workflow log-preparation
 go run ./cmd/workflowcheck --workflow release-for-study
+go run ./cmd/workflowcheck --workflow archive-completed-plan
+go run ./cmd/workflowcheck --workflow archive-blocked-plan
+go run ./cmd/workflowcheck --workflow archive-retention-window
 ```
 
 这些检查会启动临时 HTTP 处理器并调用真实公共路由。
@@ -52,4 +85,10 @@ go run ./cmd/workflowcheck --workflow release-for-study
 
 ## 测试边界
 
-本基线按要求暂不生成单元测试、测试夹具或端到端测试文件。后续任务阶段会补充红绿验证测试，届时再替换或扩展当前的生产级链路检查。
+归档能力附带聚焦的 Go 单元测试（`internal/domain`、`internal/station`），覆盖摘要
+封存与篡改检出、归档前置条件、重复归档单一结果、失败不产生副作用以及并发提交的
+互斥；`cmd/workflowcheck` 的端到端链路检查继续作为公共路由烟雾路径。
+
+```bash
+go test ./...
+```
